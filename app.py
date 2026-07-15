@@ -42,7 +42,7 @@ OTP_EXPIRY_MINUTES = int(os.getenv("OTP_EXPIRY_MINUTES", "10"))
 BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
 
 USERNAME_REGEX = re.compile(r"^[A-Za-z0-9_.-]{3,30}$")
-VALID_ENTRY_TYPES = {"phone", "email", "code", "link", "note"}
+VALID_ENTRY_TYPES = {"phone", "email", "code", "link", "note", "secret_file"}
 
 # ----------------------------
 # App
@@ -225,6 +225,7 @@ def init_db():
             reset_otp TEXT,
             reset_otp_created_at TEXT,
             reset_verified INTEGER NOT NULL DEFAULT 0,
+            role TEXT NOT NULL DEFAULT 'user',
             phone TEXT,
             custom_code TEXT,
             links TEXT,
@@ -232,6 +233,12 @@ def init_db():
             updated_at TEXT NOT NULL
         )
     """)
+
+    # Ensure role column exists if upgrading an existing DB
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'")
+    except sqlite3.OperationalError:
+        pass
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS sessions (
@@ -515,6 +522,17 @@ def get_current_user_and_session(authorization: Optional[str] = Header(None)):
         return user_row, session_row
     finally:
         conn.close()
+
+
+def require_role(allowed_roles: List[str]):
+    """FastAPI dependency to enforce role-based access control (RBAC)."""
+    def role_checker(authorization: Optional[str] = Header(None)):
+        user_row, session_row = get_current_user_and_session(authorization)
+        user_role = user_row["role"] if "role" in user_row.keys() else "user"
+        if user_role not in allowed_roles:
+            raise HTTPException(status_code=403, detail="Forbidden: You do not have sufficient privileges for this action.")
+        return user_row, session_row
+    return role_checker
 
 
 # ----------------------------
