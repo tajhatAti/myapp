@@ -467,3 +467,98 @@ function copyVault(id, value) {
   navigator.clipboard.writeText(value);
   toast("Copied to clipboard! 📋", "success");
 }
+
+// ==================== 2FA FUNCTIONS (script.js) ====================
+async function setup2FA() {
+  try {
+    const data = await api("/2fa/setup", "POST", {}, true);
+    document.getElementById("secretKey").textContent = data.secret;
+    
+    // Generate QR Code
+    const qrContainer = document.getElementById("qrCodeContainer");
+    if (qrContainer) {
+      qrContainer.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.otpauth_url)}" alt="QR Code">`;
+    }
+    
+    const modal = document.getElementById("modal2FA");
+    if (modal) modal.classList.remove("hidden");
+    
+    const step1 = document.getElementById("twofaStep1");
+    const step2 = document.getElementById("twofaStep2");
+    if (step1) step1.classList.remove("hidden");
+    if (step2) step2.classList.add("hidden");
+    
+    // Setup OTP boxes for 2FA verification
+    setupOtpBoxes("otpBoxes2FA", () => confirm2FA());
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+function close2FAModal() {
+  const modal = document.getElementById("modal2FA");
+  if (modal) modal.classList.add("hidden");
+}
+
+async function verify2FA() {
+  const step1 = document.getElementById("twofaStep1");
+  const step2 = document.getElementById("twofaStep2");
+  if (step1) step1.classList.add("hidden");
+  if (step2) step2.classList.remove("hidden");
+}
+
+async function confirm2FA() {
+  const otp = getOtpValue("otpBoxes2FA");
+  if (otp.length !== 6) {
+    toast("Enter the 6-digit code", "error");
+    return;
+  }
+  
+  try {
+    await api("/2fa/verify", "POST", { otp }, true);
+    toast("2FA enabled successfully! 🎉", "success");
+    close2FAModal();
+    clearOtpBoxes("otpBoxes2FA");
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+// ==================== DELETE ACCOUNT FUNCTIONS (script.js) ====================
+function deleteAccountModal() {
+  const modal = document.getElementById("modalDeleteAccount");
+  if (modal) modal.classList.remove("hidden");
+  const pwdInput = document.getElementById("deletePassword");
+  if (pwdInput) pwdInput.value = "";
+}
+
+function closeDeleteModal() {
+  const modal = document.getElementById("modalDeleteAccount");
+  if (modal) modal.classList.add("hidden");
+}
+
+async function confirmDeleteAccount() {
+  const password = document.getElementById("deletePassword").value;
+  
+  if (!password) {
+    toast("Please enter your password", "error");
+    return;
+  }
+  
+  if (!confirm("Are you sure? This cannot be undone!")) {
+    return;
+  }
+  
+  try {
+    await api("/account/delete", "POST", { password }, true);
+    toast("Account deleted successfully", "success");
+    authToken = null;
+    localStorage.removeItem("ahad_token");
+    closeDeleteModal();
+    setTimeout(() => {
+      showScreen("screen-landing");
+    }, 1500);
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}

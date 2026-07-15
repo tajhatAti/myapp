@@ -713,6 +713,89 @@ document.getElementById("btnLogout").addEventListener("click", async () => {
   showScreen("screen-landing");
 });
 
+// ==================== 2FA FUNCTIONS ====================
+async function setup2FA() {
+  try {
+    const data = await api("/2fa/setup", "POST", {}, true);
+    document.getElementById("secretKey").textContent = data.secret;
+    
+    // Generate QR Code
+    const qrContainer = document.getElementById("qrCodeContainer");
+    qrContainer.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.otpauth_url)}" alt="QR Code">`;
+    
+    document.getElementById("modal2FA").classList.remove("hidden");
+    document.getElementById("twofaStep1").classList.remove("hidden");
+    document.getElementById("twofaStep2").classList.add("hidden");
+    
+    // Setup OTP boxes for 2FA verification
+    setupOtpBoxes("otpBoxes2FA", () => confirm2FA());
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+function close2FAModal() {
+  document.getElementById("modal2FA").classList.add("hidden");
+}
+
+async function verify2FA() {
+  document.getElementById("twofaStep1").classList.add("hidden");
+  document.getElementById("twofaStep2").classList.remove("hidden");
+}
+
+async function confirm2FA() {
+  const otp = getOtpValue("otpBoxes2FA");
+  if (otp.length !== 6) {
+    toast("Enter the 6-digit code", "error");
+    return;
+  }
+  
+  try {
+    await api("/2fa/verify", "POST", { otp }, true);
+    toast("2FA enabled successfully! 🎉", "success");
+    close2FAModal();
+    clearOtpBoxes("otpBoxes2FA");
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+// ==================== DELETE ACCOUNT FUNCTIONS ====================
+function deleteAccountModal() {
+  document.getElementById("modalDeleteAccount").classList.remove("hidden");
+  document.getElementById("deletePassword").value = "";
+}
+
+function closeDeleteModal() {
+  document.getElementById("modalDeleteAccount").classList.add("hidden");
+}
+
+async function confirmDeleteAccount() {
+  const password = document.getElementById("deletePassword").value;
+  
+  if (!password) {
+    toast("Please enter your password", "error");
+    return;
+  }
+  
+  if (!confirm("Are you sure? This cannot be undone!")) {
+    return;
+  }
+  
+  try {
+    await api("/account/delete", "POST", { password }, true);
+    toast("Account deleted successfully", "success");
+    authToken = null;
+    localStorage.removeItem("ahad_token");
+    closeDeleteModal();
+    setTimeout(() => {
+      showScreen("screen-landing");
+    }, 1500);
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
 // ==================== UTILITY ====================
 function escapeHtml(text) {
   if (!text) return '';
