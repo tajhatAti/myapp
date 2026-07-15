@@ -42,7 +42,7 @@ OTP_EXPIRY_MINUTES = int(os.getenv("OTP_EXPIRY_MINUTES", "10"))
 BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
 
 USERNAME_REGEX = re.compile(r"^[A-Za-z0-9_.-]{3,30}$")
-VALID_ENTRY_TYPES = {"phone", "email", "code", "link", "note", "secret_file"}
+VALID_ENTRY_TYPES = {"phone", "email", "code", "link", "note", "password", "secret_file", "file"}
 
 # ----------------------------
 # App

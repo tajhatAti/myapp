@@ -26,9 +26,11 @@ async function api(path, method = "POST", body = null, auth = false) {
     body: body ? JSON.stringify(body) : null
   });
   if (res.status === 401 && auth) {
+    localStorage.removeItem("ahad_token");
     localStorage.removeItem("ahad_auth_token");
+    localStorage.removeItem("ahad_user");
     localStorage.removeItem("ahad_auth_user");
-    showToast("Session expired. Please sign in again.");
+    toast("Session expired. Please sign in again.", "error");
     setTimeout(() => window.location.reload(), 1500);
     throw new Error("Session expired.");
   }
@@ -395,4 +397,73 @@ document.getElementById("confirmLogout").addEventListener("click", async () => {
 // Auto login if a session token already exists
 if (authToken) {
   loadDashboard().then(() => showScreen("screen-dashboard")).catch(() => {});
-        }
+}
+
+// Vault functions for script.js
+async function saveVault() {
+  const typeEl = document.getElementById("vaultType");
+  const labelEl = document.getElementById("vaultLabel");
+  const valueEl = document.getElementById("vaultValue");
+  if (!typeEl || !labelEl || !valueEl) return;
+  const type = typeEl.value;
+  const label = labelEl.value.trim();
+  const value = valueEl.value.trim();
+  if (!label || !value) {
+    toast("Label and Value are required!", "error");
+    return;
+  }
+  try {
+    await api("/vault/add", "POST", { type, label, value }, true);
+    toast("Vault item saved! 🔐", "success");
+    if (typeof hideVaultForm === "function") hideVaultForm();
+    await loadVault();
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+async function loadVault() {
+  const list = document.getElementById("vaultList");
+  if (!list) return;
+  try {
+    const data = await api("/vault", "GET", null, true);
+    if (!data.entries || data.entries.length === 0) {
+      list.innerHTML = `<div class="empty-state"><p>Your vault is empty</p></div>`;
+      return;
+    }
+    const icons = { phone: "📱", email: "📧", code: "🔑", link: "🔗", note: "📝", password: "🔐", secret_file: "📁", file: "📁" };
+    list.innerHTML = data.entries.map(item => `
+      <div class="vault-item" data-id="${item.id}">
+        <div class="vault-info">
+          <div class="vault-icon">${icons[item.type] || "📄"}</div>
+          <div class="vault-details">
+            <h4>${item.label}</h4>
+            <p>${item.value}</p>
+          </div>
+        </div>
+        <div class="vault-actions">
+          <button class="vault-btn" onclick="copyVault('${item.id}', '${item.value.replace(/'/g, "\\'")}')">📋 Copy</button>
+          <button class="vault-btn delete" onclick="deleteVault(${item.id})">🗑️</button>
+        </div>
+      </div>
+    `).join('');
+  } catch (err) {
+    console.error("Load vault error:", err);
+  }
+}
+
+async function deleteVault(id) {
+  if (!confirm("Delete this vault item?")) return;
+  try {
+    await api("/vault/delete", "POST", { id }, true);
+    toast("Vault item deleted!", "success");
+    await loadVault();
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+function copyVault(id, value) {
+  navigator.clipboard.writeText(value);
+  toast("Copied to clipboard! 📋", "success");
+}

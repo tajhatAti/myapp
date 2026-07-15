@@ -85,9 +85,11 @@ async function api(path, method = "POST", body = null, auth = false) {
   });
   
   if (res.status === 401 && auth) {
+    localStorage.removeItem("ahad_token");
     localStorage.removeItem("ahad_auth_token");
+    localStorage.removeItem("ahad_user");
     localStorage.removeItem("ahad_auth_user");
-    showToast("Session expired. Please sign in again.", "error");
+    toast("Session expired. Please sign in again.", "error");
     setTimeout(() => window.location.reload(), 1500);
     throw new Error("Session expired.");
   }
@@ -449,7 +451,7 @@ async function loadVault() {
     
     const icons = {
       phone: "📱", email: "📧", code: "🔑", link: "🔗", 
-      note: "📝", password: "🔐"
+      note: "📝", password: "🔐", secret_file: "📁", file: "📁"
     };
     
     list.innerHTML = data.entries.map(item => `
