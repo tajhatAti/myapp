@@ -65,6 +65,9 @@ RATE_LIMIT_WINDOW = 300
 RATE_LIMIT_MAX_ATTEMPTS = 6
 _attempts = defaultdict(list)
 
+# In-memory store for pending 2FA login verifications
+_pending_2fa_logins = {}  # temp_token -> {user_id, username, expires_at}
+
 
 def rate_limit(key: str):
     now = time.time()
@@ -681,6 +684,8 @@ def login(user: UserLogin, request: Request):
 
     conn = get_db_connection()
     cursor = conn.cursor()
+    user_id = None
+    username = None
     try:
         if "@" in identifier:
             row = cursor.execute(
@@ -695,11 +700,34 @@ def login(user: UserLogin, request: Request):
             raise HTTPException(status_code=400, detail="Incorrect username/email or password.")
         if row["is_verified"] == 0:
             raise HTTPException(status_code=400, detail="Please verify your email before signing in.")
+
+        user_id = row["id"]
+        username = row["username"]
+        
+        # Check if 2FA is enabled
+        twofa_row = cursor.execute(
+            "SELECT is_enabled FROM user_2fa WHERE user_id = ? AND is_enabled = 1", (user_id,)
+        ).fetchone()
+        
+        if twofa_row:
+            # 2FA is enabled → return a temp token instead of creating session
+            temp_token = generate_token()
+            _pending_2fa_logins[temp_token] = {
+                "user_id": user_id,
+                "username": username,
+                "expires_at": time.time() + 300  # 5 minutes expiry
+            }
+            return {
+                "requires_2fa": True,
+                "temp_token": temp_token,
+                "username": username,
+                "message": "2FA verification required. Please enter the code from your authenticator app."
+            }
     finally:
         conn.close()
 
-    token = create_session(row["id"], request)
-    return {"message": "Login successful!", "username": row["username"], "token": token}
+    token = create_session(user_id, request)
+    return {"message": "Login successful!", "username": username, "token": token}
 
 
 @app.post("/logout")
@@ -1072,31 +1100,72 @@ def verify_2fa_setup(payload: TwoFactorVerify, authorization: Optional[str] = He
 
 
 @app.post("/2fa/verify-login")
-def verify_2fa_login(payload: TwoFactorVerify, authorization: Optional[str] = Header(None)):
+def verify_2fa_login(payload: TwoFactorVerify, request: Request):
     """Verify 2FA code during login when 2FA is enabled"""
-    user, _ = get_current_user_and_session(authorization)
+    if not payload.temp_token:
+        raise HTTPException(status_code=400, detail="Invalid login session. Please sign in again.")
+    
+    pending = _pending_2fa_logins.get(payload.temp_token)
+    if not pending:
+        raise HTTPException(status_code=400, detail="Login session expired or invalid. Please sign in again.")
+    
+    if time.time() > pending["expires_at"]:
+        del _pending_2fa_logins[payload.temp_token]
+        raise HTTPException(status_code=400, detail="Login session expired. Please sign in again.")
+    
+    user_id = pending["user_id"]
+    username = pending["username"]
+    
     conn = get_db_connection()
     try:
-        row = conn.execute("SELECT * FROM user_2fa WHERE user_id = ?", (user["id"],)).fetchone()
+        row = conn.execute("SELECT * FROM user_2fa WHERE user_id = ?", (user_id,)).fetchone()
         if not row or not row["is_enabled"]:
-            raise HTTPException(status_code=400, detail="2FA not enabled")
+            # 2FA was disabled in the meantime
+            if payload.temp_token in _pending_2fa_logins:
+                del _pending_2fa_logins[payload.temp_token]
+            # Create session directly since 2FA is no longer needed
+            token = create_session(user_id, request)
+            return {"message": "2FA no longer required", "token": token, "username": username}
+        
+        is_valid = False
+        used_backup = False
+        backup_codes_remaining = None
         
         # Check if it's a backup code
         backup_codes = json.loads(row["backup_codes"] or "[]")
         if payload.code in backup_codes:
-            # Remove used backup code
             backup_codes.remove(payload.code)
             conn.execute("UPDATE user_2fa SET backup_codes=? WHERE user_id=?", 
-                         (json.dumps(backup_codes), user["id"]))
+                         (json.dumps(backup_codes), user_id))
             conn.commit()
-            return {"message": "Backup code accepted", "backup_codes_remaining": len(backup_codes)}
+            is_valid = True
+            used_backup = True
+            backup_codes_remaining = len(backup_codes)
+        else:
+            # Verify TOTP
+            totp = pyotp.TOTP(row["secret"])
+            is_valid = totp.verify(payload.code)
         
-        # Verify TOTP
-        totp = pyotp.TOTP(row["secret"])
-        if not totp.verify(payload.code):
-            raise HTTPException(status_code=400, detail="Invalid 2FA code")
+        if not is_valid:
+            raise HTTPException(status_code=400, detail="Invalid 2FA code. Please try again.")
         
-        return {"message": "2FA verified successfully"}
+        # 2FA verified — create the actual session
+        token = create_session(user_id, request)
+        
+        # Clean up pending login
+        if payload.temp_token in _pending_2fa_logins:
+            del _pending_2fa_logins[payload.temp_token]
+        
+        response_data = {
+            "message": "2FA verified successfully",
+            "token": token,
+            "username": username,
+        }
+        if used_backup:
+            response_data["backup_codes_remaining"] = backup_codes_remaining
+            response_data["message"] = f"Backup code accepted. {backup_codes_remaining} backup codes remaining."
+        
+        return response_data
     finally:
         conn.close()
 
