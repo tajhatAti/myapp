@@ -8,7 +8,6 @@ let signupUsername = "";
 let authToken = localStorage.getItem("ahad_token") || null;
 let resendTimerInterval = null;
 let currentTab = 'overview';
-let tempToken = null; // For 2FA login flow
 
 // Screen Navigation
 function showScreen(id) {
@@ -274,16 +273,6 @@ document.getElementById("formSignin").addEventListener("submit", async e => {
   setLoading(btn, true);
   try {
     const data = await api("/login", "POST", { username, password });
-    
-    // Check if 2FA verification is required
-    if (data.requires_2fa) {
-      tempToken = data.temp_token;
-      clearOtpBoxes("otpBoxes2FALogin");
-      showScreen("screen-2fa-login");
-      toast("Enter the 6-digit code from your authenticator app", "warning");
-      return;
-    }
-    
     authToken = data.token;
     localStorage.setItem("ahad_token", authToken);
     toast("Welcome back!", "success");
@@ -295,50 +284,6 @@ document.getElementById("formSignin").addEventListener("submit", async e => {
     setLoading(btn, false);
   }
 });
-
-// ==================== 2FA LOGIN VERIFICATION ====================
-setupOtpBoxes("otpBoxes2FALogin", () => document.getElementById("btnVerify2FALogin").click());
-
-document.getElementById("btnVerify2FALogin").addEventListener("click", async () => {
-  const btn = document.getElementById("btnVerify2FALogin");
-  const code = getOtpValue("otpBoxes2FALogin");
-  
-  if (code.length !== 6) {
-    toast("Enter the 6-digit code", "error");
-    return;
-  }
-  
-  if (!tempToken) {
-    toast("Session expired. Please sign in again.", "error");
-    showScreen("screen-signin");
-    return;
-  }
-  
-  setLoading(btn, true);
-  try {
-    const data = await api("/2fa/verify-login", "POST", { code, temp_token: tempToken });
-    
-    tempToken = null;
-    authToken = data.token;
-    localStorage.setItem("ahad_token", authToken);
-    
-    toast("2FA verified! Welcome back! 🔐", "success");
-    await loadDashboard();
-    showScreen("screen-dashboard");
-  } catch (err) {
-    toast(err.message, "error");
-    clearOtpBoxes("otpBoxes2FALogin");
-  } finally {
-    setLoading(btn, false);
-  }
-});
-
-function cancel2FALogin() {
-  tempToken = null;
-  clearOtpBoxes("otpBoxes2FALogin");
-  showScreen("screen-signin");
-  toast("2FA login cancelled", "warning");
-}
 
 // ==================== FORGOT PASSWORD ====================
 let forgotEmail = "";
@@ -771,12 +716,12 @@ document.getElementById("btnLogout").addEventListener("click", async () => {
 // ==================== 2FA FUNCTIONS ====================
 async function setup2FA() {
   try {
-    const data = await api("/2fa/setup", "POST", { enable: true }, true);
+    const data = await api("/2fa/setup", "POST", {}, true);
     document.getElementById("secretKey").textContent = data.secret;
     
-    // Use the base64 QR code image returned by the backend
+    // Generate QR Code
     const qrContainer = document.getElementById("qrCodeContainer");
-    qrContainer.innerHTML = `<img src="${data.qr_code}" alt="QR Code" style="width:200px;height:200px;border-radius:12px;">`;
+    qrContainer.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.otpauth_url)}" alt="QR Code">`;
     
     document.getElementById("modal2FA").classList.remove("hidden");
     document.getElementById("twofaStep1").classList.remove("hidden");
@@ -799,14 +744,14 @@ async function verify2FA() {
 }
 
 async function confirm2FA() {
-  const code = getOtpValue("otpBoxes2FA");
-  if (code.length !== 6) {
+  const otp = getOtpValue("otpBoxes2FA");
+  if (otp.length !== 6) {
     toast("Enter the 6-digit code", "error");
     return;
   }
   
   try {
-    await api("/2fa/verify-setup", "POST", { code }, true);
+    await api("/2fa/verify", "POST", { otp }, true);
     toast("2FA enabled successfully! 🎉", "success");
     close2FAModal();
     clearOtpBoxes("otpBoxes2FA");
