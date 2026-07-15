@@ -238,28 +238,6 @@
   </div>
 </div>
 
-<!-- 2FA LOGIN SCREEN (Authenticator code entry) -->
-<div class="auth-container hidden" id="screen-2fa-login">
-  <div class="auth-card">
-    <button class="back-btn" onclick="cancel2FALogin()">← Back</button>
-    <div class="auth-header">
-      <div class="otp-icon">📱</div>
-      <h2>Two-Factor Authentication</h2>
-      <p>Enter the 6-digit code from your authenticator app</p>
-    </div>
-    <div class="otp-boxes" id="otpBoxes2FALogin">
-      <input maxlength="1" type="text" inputmode="numeric">
-      <input maxlength="1" type="text" inputmode="numeric">
-      <input maxlength="1" type="text" inputmode="numeric">
-      <input maxlength="1" type="text" inputmode="numeric">
-      <input maxlength="1" type="text" inputmode="numeric">
-      <input maxlength="1" type="text" inputmode="numeric">
-    </div>
-    <button class="btn-auth" id="btnVerify2FALogin"><span>Verify & Sign In</span></button>
-    <p class="auth-switch">Having trouble? <a onclick="cancel2FALogin()">Sign in differently</a></p>
-  </div>
-</div>
-
 <!-- OTP SCREEN -->
 <div class="auth-container hidden" id="screen-otp">
   <div class="auth-card">
