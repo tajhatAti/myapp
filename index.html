@@ -396,21 +396,21 @@
       <div class="quick-actions">
         <h2>⚡ Quick Actions</h2>
         <div class="action-buttons">
-          <button class="action-btn-large" onclick="switchTab('vault')">
+          <button class="action-btn-large" onclick="showVaultForm()">
             <span class="btn-icon">➕</span>
             <span class="btn-text">Add to Vault</span>
           </button>
-          <button class="action-btn-large" onclick="switchTab('notes')">
+          <button class="action-btn-large" onclick="showNoteForm()">
             <span class="btn-icon">✨</span>
             <span class="btn-text">New Note</span>
           </button>
-          <button class="action-btn-large" onclick="switchTab('bookmarks')">
+          <button class="action-btn-large" onclick="showBookmarkForm()">
             <span class="btn-icon">🌐</span>
             <span class="btn-text">Add Bookmark</span>
           </button>
           <button class="action-btn-large" onclick="switchTab('profile')">
             <span class="btn-icon">📱</span>
-            <span class="btn-text">Update Phone</span>
+            <span class="btn-text">Setup 2FA</span>
           </button>
         </div>
       </div>
@@ -420,7 +420,7 @@
     <div class="dash-tab-content" id="tab-vault">
       <div class="tab-header">
         <h2>🔐 Secure Vault</h2>
-        <button class="btn-add-new" id="btnAddVault">➕ Add New</button>
+        <button class="btn-add-new" id="btnAddVault" onclick="showVaultForm()">➕ Add New</button>
       </div>
       
       <!-- Vault Add Form -->
@@ -493,7 +493,7 @@
     <div class="dash-tab-content" id="tab-bookmarks">
       <div class="tab-header">
         <h2>🔖 Bookmarks</h2>
-        <button class="btn-add-new" id="btnAddBookmark">➕ Add Bookmark</button>
+        <button class="btn-add-new" id="btnAddBookmark" onclick="showBookmarkForm()">➕ Add Bookmark</button>
       </div>
       
       <!-- Bookmark Add Form -->
@@ -548,17 +548,73 @@
         <div class="profile-card">
           <h3>🔐 Security</h3>
           <button class="btn-security" onclick="showScreen('screen-forgot1')">🔄 Change Password</button>
-          <button class="btn-security" id="btn2FA">📱 Setup 2FA</button>
+          <button class="btn-security" onclick="setup2FA()">📱 Setup 2FA</button>
           <button class="btn-security" onclick="exportData()">📤 Export My Data</button>
         </div>
 
         <div class="profile-card danger-zone">
           <h3>⚠️ Danger Zone</h3>
-          <button class="btn-danger">🗑️ Delete Account</button>
+          <button class="btn-danger" onclick="deleteAccountModal()">🗑️ Delete Account</button>
         </div>
       </div>
     </div>
 
+  </div>
+</div>
+
+<!-- 2FA SETUP MODAL -->
+<div class="modal-overlay hidden" id="modal2FA">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>📱 Setup 2FA Authentication</h2>
+      <button class="modal-close" onclick="close2FAModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="twofa-step" id="twofaStep1">
+        <p>Scan this QR code with your authenticator app:</p>
+        <div class="qr-code-container" id="qrCodeContainer">
+          <div class="qr-placeholder">Loading QR Code...</div>
+        </div>
+        <p class="or-text">Or enter this code manually:</p>
+        <div class="secret-key" id="secretKey">Loading...</div>
+        <button class="btn-primary" onclick="verify2FA()">Next →</button>
+      </div>
+      <div class="twofa-step hidden" id="twofaStep2">
+        <p>Enter the 6-digit code from your authenticator app:</p>
+        <div class="otp-boxes" id="otpBoxes2FA">
+          <input maxlength="1" type="text" inputmode="numeric">
+          <input maxlength="1" type="text" inputmode="numeric">
+          <input maxlength="1" type="text" inputmode="numeric">
+          <input maxlength="1" type="text" inputmode="numeric">
+          <input maxlength="1" type="text" inputmode="numeric">
+          <input maxlength="1" type="text" inputmode="numeric">
+        </div>
+        <button class="btn-primary" onclick="confirm2FA()">Verify & Enable</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DELETE ACCOUNT MODAL -->
+<div class="modal-overlay hidden" id="modalDeleteAccount">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>⚠️ Delete Account</h2>
+      <button class="modal-close" onclick="closeDeleteModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="warning-box">
+        <strong>Warning:</strong> This action cannot be undone. All your data will be permanently deleted.
+      </div>
+      <div class="input-group">
+        <label>Enter your password to confirm:</label>
+        <input type="password" id="deletePassword" placeholder="Your password" class="input-text">
+      </div>
+      <div class="form-actions">
+        <button class="btn-danger" onclick="confirmDeleteAccount()">Yes, Delete My Account</button>
+        <button class="btn-cancel-form" onclick="closeDeleteModal()">Cancel</button>
+      </div>
+    </div>
   </div>
 </div>
 
