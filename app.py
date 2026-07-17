@@ -22,6 +22,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 
+import db  # SQLite/PostgreSQL compatibility layer (auto-detects via DATABASE_URL)
+
 # ----------------------------
 # Logging
 # ----------------------------
@@ -192,7 +194,7 @@ class TwoFactorVerify(BaseModel):
 
 
 # ----------------------------
-# DB Helpers
+# DB Helpers (SQLite + PostgreSQL)
 # ----------------------------
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
@@ -202,7 +204,19 @@ def now_utc_str() -> str:
     return now_utc().isoformat()
 
 
+def q(i: int) -> str:
+    """Parameter placeholder: %s for Postgres, ? for SQLite."""
+    return "%s" if db.is_postgres() else "?"
+
+
+def qs(n: int) -> str:
+    return ", ".join(q(i) for i in range(n))
+
+
 def get_db_connection():
+    """Return a DB connection with sqlite3-compatible API (works for SQLite & PostgreSQL)."""
+    if db.is_postgres():
+        return db.get_db_connection()
     conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
@@ -210,6 +224,21 @@ def get_db_connection():
 
 
 def init_db():
+    # Tables are created by db.create_tables() automatically on module import
+    # (works for both SQLite and PostgreSQL via DATABASE_URL env var).
+    # Add any future migrations here:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    conn.close()
+    logger.info("Database ready. Backend: %s", "PostgreSQL" if db.is_postgres() else "SQLite")
+
+
+def _old_init_disabled():
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -393,7 +422,6 @@ def init_db():
 
     conn.commit()
     conn.close()
-    logger.info("Database initialized at: %s", DB_PATH)
 
 
 init_db()
@@ -549,6 +577,7 @@ def read_index():
 def health():
     return {
         "status": "ok",
+        "db": "postgresql" if db.is_postgres() else "sqlite",
         "brevo_api_key_set": bool(os.getenv("BREVO_API_KEY", "").strip()),
         "sender_email_set": bool(os.getenv("SENDER_EMAIL", "").strip()),
     }
@@ -1009,11 +1038,18 @@ def setup_2fa(payload: TwoFactorSetup, authorization: Optional[str] = Header(Non
             # Generate backup codes
             backup_codes = [secrets.token_hex(8) for _ in range(8)]
             
-            # Store temporarily (not enabled yet)
-            conn.execute("""
-                INSERT OR REPLACE INTO user_2fa (user_id, secret, is_enabled, backup_codes, created_at, updated_at)
-                VALUES (?, ?, 0, ?, ?, ?)
-            """, (user["id"], secret, json.dumps(backup_codes), current_time, current_time))
+            # Store temporarily (not enabled yet) — use upsert compatible with both DBs
+            existing = conn.execute("SELECT id FROM user_2fa WHERE user_id = ?", (user["id"],)).fetchone()
+            if existing:
+                conn.execute(
+                    "UPDATE user_2fa SET secret=?, is_enabled=0, backup_codes=?, updated_at=? WHERE user_id=?",
+                    (secret, json.dumps(backup_codes), current_time, user["id"])
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO user_2fa (user_id, secret, is_enabled, backup_codes, created_at, updated_at) VALUES (?, ?, 0, ?, ?, ?)",
+                    (user["id"], secret, json.dumps(backup_codes), current_time, current_time)
+                )
             conn.commit()
             
             # Generate QR code

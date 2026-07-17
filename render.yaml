@@ -1,6 +1,7 @@
 # render.yaml - Render Auto-Deploy Configuration
 # ==============================================
-# এই ফাইল Render.com এ auto-deploy সেটআপ করে
+# Free tier-এ data রাখতে DATABASE_URL (PostgreSQL/Supabase) ব্যবহার করুন
+# কারণ free tier-এ persistent disk কাজ করে না (paid plan লাগে)।
 # ==============================================
 
 services:
@@ -9,52 +10,44 @@ services:
     runtime: python
     region: singapore
     plan: free
-    
-    # Auto deploy from main branch
+
+    # Auto deploy from branch
     autoDeploy: true
-    
+    branch: arena/019f6f69-myapp
+
     # Build settings
     buildCommand: |
       pip install -r requirements.txt
     startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
-    
-    # Environment variables (Production এ Render Dashboard এ set করুন)
+
+    # Environment variables
+    # ⚠️ IMPORTANT: Render Dashboard > Environment-এ গিয়ে এই variables set করুন:
+    #
+    #   1. DATABASE_URL  = postgresql://postgres:PASSWORD@db.xxx.supabase.co:5432/postgres
+    #      (Supabase free tier থেকে নিন - DEPLOY_FREE.md দেখুন)
+    #   2. BREVO_API_KEY = আপনার Brevo API key (email sending এর জন্য)
+    #   3. SENDER_EMAIL  = noreply@yourdomain.com
+    #
     envVars:
-      - key: DB_PATH
-        value: /data/database.db
-      
-      - key: BREVO_API_KEY
-        # ⚠️ Render Dashboard > Environment > Add Environment Variable
-        # Name: BREVO_API_KEY
-        # Value: আপনার Brevo API Key
-        sync: false
-      
-      - key: SENDER_EMAIL
-        # ⚠️ Render Dashboard > Environment > Add Environment Variable
-        # Name: SENDER_EMAIL
-        # Value: noreply@yourdomain.com
-        sync: false
-      
       - key: SENDER_NAME
         value: Ahad Co
-      
+
       - key: OTP_EXPIRY_MINUTES
         value: "10"
-      
+
       - key: PYTHON_VERSION
         value: "3.11"
 
-    # Persistent disk for database
-    disk:
-      name: ahad-data
-      mountPath: /data
-      sizeGB: 1
+      - key: DATABASE_URL
+        # ⚠️ এটি Render Dashboard-এ set করুন (Add Environment Variable)
+        # Supabase / Neon PostgreSQL connection string দিন
+        sync: false
+
+      - key: BREVO_API_KEY
+        sync: false
+
+      - key: SENDER_EMAIL
+        sync: false
 
 # Health check
 healthCheckPath: /health
-
-# Cron jobs (optional - database backup)
-# cron:
-#   - name: "Database Backup"
-#     schedule: "0 2 * * *"
-#     command: "cp /data/database.db /data/backup-$(date +%Y%m%d).db && ls -lh /data/"

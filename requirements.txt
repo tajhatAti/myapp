@@ -7,3 +7,4 @@ email-validator
 pyotp
 qrcode[pil]
 gunicorn
+psycopg2-binary
